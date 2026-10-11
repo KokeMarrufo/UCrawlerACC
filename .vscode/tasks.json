@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "mvn test",
+      "type": "shell",
+      "command": "mvn test",
+      "group": "test",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run portal",
+      "type": "shell",
+      "command": "mvn -q exec:java",
+      "group": "none",
+      "problemMatcher": []
+    }
+  ]
+}

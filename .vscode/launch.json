@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Graduate Program Finder portal",
+      "request": "launch",
+      "mainClass": "finder.portal.PortalServer",
+      "projectName": "graduate-program-finder",
+      "vmArgs": "-Dportal.port=8747"
+    },
+    {
+      "type": "java",
+      "name": "UBC live crawl",
+      "request": "launch",
+      "mainClass": "finder.crawl.Main",
+      "projectName": "graduate-program-finder"
+    },
+    {
+      "type": "java",
+      "name": "Index benchmark",
+      "request": "launch",
+      "mainClass": "finder.analysis.IndexBenchmark",
+      "projectName": "graduate-program-finder"
+    }
+  ]
+}
