@@ -14,9 +14,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Offline catalog. Saved HTML is parsed when a crawl has left a file.
@@ -60,15 +62,26 @@ public final class Corpus {
         List<Program> programs = new ArrayList<>();
         List<SearchDocument> documents = new ArrayList<>();
         for (UniversitySlots.UniversitySlot slot : slots) {
-            if (!slot.crawlerPresent() || slot.csvFileName() == null) {
+            if (slot.csvFileName() == null) {
                 continue;
             }
             Path csv = dataDir.resolve(slot.csvFileName());
             if (Files.notExists(csv)) {
-                System.out.println("No catalog file for " + slot.name() + " at " + csv);
+                if (slot.crawlerPresent()) {
+                    System.out.println("No catalog file for " + slot.name() + " at " + csv);
+                }
                 continue;
             }
+            Set<String> seenUrls = new HashSet<>();
             for (Program program : CatalogLoader.load(csv)) {
+                if (program.getUrl().isBlank()) {
+                    System.out.println("Skipping " + program.getName() + " in " + slot.id() + " because it has no URL.");
+                    continue;
+                }
+                if (!seenUrls.add(program.getUrl())) {
+                    System.out.println("Skipping duplicate URL in " + slot.id() + ": " + program.getUrl());
+                    continue;
+                }
                 programs.add(program);
                 documents.add(documentFor(dataDir, slot, program));
             }

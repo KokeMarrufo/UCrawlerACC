@@ -1,6 +1,6 @@
 # Graduate Program Finder
 
-Java back end for searching graduate programs. The UBC crawler is the one that already ran for Assignment 1. Search, ranking, spell check, and the student and admin pages work offline from `data/ubc_programs.csv`. Four other university slots are empty on purpose: same columns, no crawler, no invented programs.
+Java back end for searching graduate programs. The UBC crawler is the one that already ran for Assignment 1. Search, ranking, spell check, and the student and admin pages work offline from `data/ubc_programs.csv`. Four other university slots stay empty until a teammate adds `data/slot-2.csv` (and slot-3, slot-4, slot-5) with the same columns. There is no crawler for them, and no invented programs.
 
 A window is not required. The portal is a small JDK web server so a demo can log in, search, apply, and accept or reject.
 
@@ -55,7 +55,8 @@ Tests use HTML fixtures and the checked-in CSV. They do not contact UBC.
 
 ## What the pages do
 
-- Search uses the hash inverted index, then a binary heap ordered by how often the query words occur.
+- Search uses the hash inverted index, then a binary heap ordered by how often the query words occur. Leave the box blank and turn weights on to order every program in the selected university.
+- The analysis section can time one full scan against the index. That measurement runs only when asked.
 - If nothing matches, spell check suggests vocabulary words within edit distance 2. Completion walks the same AVL tree while you type.
 - Optional weights re-rank the matches with mergesort. Cost is first-year tuition (domestic or international). Time is the minimum completion time in months. Admission is offers divided by applications when both numbers exist. Lower cost and shorter time rank higher. A higher offer rate ranks higher. If a number is missing, that criterion is dropped and the other weights are renormalized. The formula is on the student page.
 - Frequency count is per word per URL. Pattern search is separate from the tuition, date, and program-id checks (for example `VGMMSC-CA`).

@@ -149,7 +149,16 @@ public final class HtmlPages {
         body.append("""
                 <section id="search">
                   <h2>Search</h2>
-                  <p class="muted">The index looks up each word. A binary heap orders pages by how often those words occur. Weights are a separate re-rank, done with mergesort.</p>
+                  <p class="muted">The index looks up each word. A binary heap orders pages by how often those words occur. Weights are a separate re-rank, done with mergesort. Leave the words blank and turn weights on to order every program in this university.</p>
+                  <ul>
+                    <li><b>Inverted index.</b> A hash map from a word to the pages and positions where it occurs. A search looks the word up. It does not read every page.</li>
+                    <li><b>Frequency.</b> How many of those positions sit on one URL.</li>
+                    <li><b>Keyword rank.</b> A binary heap puts the page with more occurrences first.</li>
+                    <li><b>Completion.</b> The vocabulary is an AVL tree. A prefix walks that tree.</li>
+                    <li><b>Spelling.</b> If the index has no page, words within edit distance 2 are suggested from that same tree. Words whose length is already too far away stop early.</li>
+                    <li><b>Weights.</b> Mergesort orders by a score. Lower tuition and a shorter program rank higher. A higher offer rate ranks higher.</li>
+                    <li><b>Regex.</b> Validation checks tuition, dates, and program ids. Pattern search is a different action over the page text.</li>
+                  </ul>
                   <form method="get" action="/student">
                     <input type="hidden" name="school" value="%s">
                     <label>Words <input id="q" name="q" value="%s" autocomplete="off"></label>
@@ -166,7 +175,7 @@ public final class HtmlPages {
                       </label>
                     </div>
                     <div class="checks">
-                      <label><input type="checkbox" name="weighted" value="1"%s> Re-rank matches with these weights</label>
+                      <label><input type="checkbox" name="weighted" value="1"%s> Apply these weights (blank words rank the whole list)</label>
                       <button type="submit">Search</button>
                     </div>
                   </form>
@@ -205,10 +214,17 @@ public final class HtmlPages {
                 currentSlot = slot;
             }
         }
-        if (currentSlot == null || !currentSlot.crawlerPresent()) {
+        if (currentSlot != null && !currentSlot.crawlerPresent() && view.programs.isEmpty()) {
             body.append("<p>No programs in this slot. The columns are the same as UBC: ")
                     .append(Web.escape(String.join(", ", UniversitySlots.columns().subList(0, 4))))
-                    .append(", then the detail fields. A crawler has not been added.</p>");
+                    .append(", then the detail fields. A crawler has not been added. ")
+                    .append("A file named data/")
+                    .append(Web.escape(currentSlot.csvFileName()))
+                    .append(" with those columns is loaded on startup. Nothing is invented if the file is missing.</p>");
+        } else if (currentSlot != null && !currentSlot.crawlerPresent()) {
+            body.append("<p>Loaded from data/")
+                    .append(Web.escape(currentSlot.csvFileName()))
+                    .append(". A crawler has not been added for this university.</p>");
         }
         body.append("<div class=\"scroll\"><table><thead><tr>");
         body.append("<th>Program</th><th>Id</th><th>Faculty</th><th>Domestic</th><th>International</th><th>Min time</th><th>Offer rate</th>");
@@ -295,6 +311,23 @@ public final class HtmlPages {
                 Web.escape(view.patternMessage),
                 patternTable(view.patternMatches),
                 historyTable(view.history)));
+
+        body.append("""
+                <section id="analysis">
+                  <h2>Full scan versus the index</h2>
+                  <p class="muted">Chapter 1 timing. It runs only when you ask, and it does not change the search.</p>
+                  <form method="get" action="/student#analysis">
+                    <input type="hidden" name="school" value="%s">
+                    <input type="hidden" name="benchmark" value="1">
+                    <button type="submit">Time the word science</button>
+                  </form>
+                  <pre class="formula">%s</pre>
+                </section>
+                """.formatted(
+                Web.escape(view.school),
+                view.benchmarkText == null || view.benchmarkText.isBlank()
+                        ? "Not run yet."
+                        : Web.escape(view.benchmarkText)));
 
         String script = """
                 <script>
@@ -530,7 +563,9 @@ public final class HtmlPages {
             html.append("<tr><td><a href=\"").append(Web.escape(hit.url)).append("\">")
                     .append(Web.escape(hit.name)).append("</a><br><span class=\"muted\">")
                     .append(Web.escape(hit.programId)).append(" · ").append(Web.escape(hit.university))
-                    .append("</span></td><td>").append(hit.keywordScore)
+                    .append("</span></td><td>").append(Web.escape(
+                            hit.keywordText == null || hit.keywordText.isEmpty()
+                                    ? Integer.toString(hit.keywordScore) : hit.keywordText))
                     .append("</td><td>").append(Web.escape(hit.weightScore))
                     .append("</td><td>").append(Web.escape(hit.breakdown))
                     .append("</td><td>").append(Web.escape(hit.tuition))
@@ -671,6 +706,7 @@ public final class HtmlPages {
         public String university = "";
         public String url = "";
         public int keywordScore;
+        public String keywordText = "";
         public String weightScore = "";
         public String breakdown = "";
         public String tuition = "";
@@ -703,5 +739,6 @@ public final class HtmlPages {
         public String pattern = "";
         public String patternMessage = "";
         public List<PatternFinder.Match> patternMatches = List.of();
+        public String benchmarkText = "";
     }
 }

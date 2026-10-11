@@ -59,7 +59,11 @@ public final class SearchService {
         }
         List<String> tokens = Tokens.words(rawQuery);
         if (tokens.isEmpty()) {
-            return SearchOutcome.emptyQuery();
+            return new SearchOutcome(
+                    "No searchable words. A word is at least two letters.",
+                    List.of(),
+                    List.of(),
+                    false);
         }
         searchFrequency.record(tokens);
         if (corpus.documents().isEmpty()) {
@@ -90,6 +94,30 @@ public final class SearchService {
             return new SearchOutcome("", List.of(), weightReorder(hits, weights), true);
         }
         return new SearchOutcome("", List.of(), keywordOnly(hits), true);
+    }
+
+    /**
+     * Orders one university's programs by the weighted mergesort only.
+     * Keyword counts are not involved, so this does not record a search.
+     */
+    public SearchOutcome rankCatalog(List<Program> programs, WeightModel.Weights weights) {
+        if (weights == null || !weights.anyPositive()
+                || weights.cost() < 0 || weights.time() < 0 || weights.admission() < 0) {
+            return new SearchOutcome(
+                    "Weights must be zero or positive, and at least one weight has to be above zero.",
+                    List.of(),
+                    List.of(),
+                    false);
+        }
+        if (programs == null || programs.isEmpty()) {
+            return new SearchOutcome("This university has no programs to rank.", List.of(), List.of(), false);
+        }
+        List<Ranked> ranked = new ArrayList<>();
+        for (WeightModel.ScoredProgram scored : WeightedMergeSort.rank(programs, weights)) {
+            Program program = scored.program();
+            ranked.add(new Ranked(new KeywordRanker.Hit(program.getUrl(), program.getName(), -1), scored));
+        }
+        return new SearchOutcome("", List.of(), ranked, false);
     }
 
     private List<Ranked> keywordOnly(List<KeywordRanker.Hit> hits) {

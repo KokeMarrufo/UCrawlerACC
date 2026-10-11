@@ -2,6 +2,7 @@ package finder.portal;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
+import finder.analysis.IndexBenchmark;
 import finder.crawl.Program;
 import finder.index.FrequencyCount;
 import finder.index.SearchFrequency;
@@ -221,7 +222,10 @@ public final class PortalServer implements AutoCloseable {
                 view.error = "Weights have to be numbers.";
             } else {
                 WeightModel.Weights weights = new WeightModel.Weights(cost, time, admission, "international".equals(view.tuition));
-                SearchService.SearchOutcome outcome = search.search(view.query, view.weighted, weights);
+                boolean rankWholeList = view.weighted && view.query.isBlank();
+                SearchService.SearchOutcome outcome = rankWholeList
+                        ? search.rankCatalog(view.programs, weights)
+                        : search.search(view.query, view.weighted, weights);
                 view.error = outcome.error() == null ? "" : outcome.error();
                 view.suggestions = outcome.suggestions();
                 List<HtmlPages.HitRow> rows = new ArrayList<>();
@@ -230,6 +234,13 @@ public final class PortalServer implements AutoCloseable {
                 }
                 view.hits = rows;
             }
+        }
+        if ("1".equals(query.get("benchmark"))) {
+            IndexBenchmark.Timing timing = IndexBenchmark.compare(
+                    search.corpus().documents(), search.corpus().index(), "science", 40);
+            view.benchmarkText = String.format(Locale.US,
+                    "word: science%nrepeats: %d (totals, not one lookup)%nfull scan: %.3f ms%nindex lookup: %.3f ms%ncount: %d%ncounts match: %s",
+                    timing.repeats(), timing.scanMillis(), timing.indexMillis(), timing.count(), timing.countsMatch());
         }
         if (query.containsKey("freqWord") || query.containsKey("freqUrl")) {
             view.freqWord = query.getOrDefault("freqWord", "");
@@ -373,6 +384,7 @@ public final class PortalServer implements AutoCloseable {
         row.url = ranked.keyword().url();
         row.name = ranked.keyword().name();
         row.keywordScore = ranked.keyword().score();
+        row.keywordText = row.keywordScore < 0 ? "—" : Integer.toString(row.keywordScore);
         SearchDocument document = search.corpus().documentByUrl(row.url);
         Program program = search.corpus().programByUrl(row.url);
         if (document != null) {
@@ -397,7 +409,10 @@ public final class PortalServer implements AutoCloseable {
             row.breakdown = ranked.weighted().breakdown().describe();
         } else {
             row.weightScore = String.format(Locale.US, "%.3f", ranked.weighted().score());
-            row.breakdown = ranked.weighted().breakdown().describe();
+            String how = row.keywordScore < 0
+                    ? "mergesort on this university's programs; "
+                    : "mergesort after the keyword list; ";
+            row.breakdown = how + ranked.weighted().breakdown().describe();
         }
         return row;
     }

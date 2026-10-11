@@ -14,12 +14,19 @@ import java.util.regex.PatternSyntaxException;
  */
 public final class PatternFinder {
     private static final int MAX_MATCHES = 50;
+    public static final int MAX_PATTERN_LENGTH = 80;
 
     private PatternFinder() {}
 
     public static Outcome find(List<SearchDocument> documents, String regex) {
         if (regex == null || regex.isBlank()) {
             return Outcome.error("Enter a regular expression.");
+        }
+        if (regex.length() > MAX_PATTERN_LENGTH) {
+            return Outcome.error("That pattern is too long to run safely.");
+        }
+        if (regex.contains(")+") || regex.contains(")*") || regex.contains("){")) {
+            return Outcome.error("That pattern can lock up the search. Do not put a quantifier on a group.");
         }
         Pattern pattern;
         try {

@@ -246,7 +246,7 @@ class FeatureTests {
         List<UniversitySlots.UniversitySlot> slots = UniversitySlots.all();
         assertEquals(5, slots.size());
         assertEquals(4, slots.stream().filter(slot -> !slot.crawlerPresent()).count());
-        assertTrue(slots.stream().filter(slot -> !slot.crawlerPresent()).allMatch(slot -> slot.csvFileName() == null));
+        assertEquals(4, slots.stream().filter(slot -> !slot.crawlerPresent() && slot.csvFileName() != null).count());
 
         Corpus corpus = Corpus.load(Path.of("data"));
         assertEquals(61, corpus.documents().size());
@@ -275,6 +275,9 @@ class FeatureTests {
         assertTrue(outcome.isEmptyQuery());
         assertTrue(outcome.hits().isEmpty());
         assertEquals(0, frequency.count("alpha"));
+        finder.portal.SearchService.SearchOutcome letters = service.search("a", false, new WeightModel.Weights(1, 1, 1, false));
+        assertEquals("No searchable words. A word is at least two letters.", letters.error());
+        assertFalse(letters.recorded());
         assertTrue(service.complete("gla").contains("glaciers"));
         assertTrue(service.complete("").isEmpty());
     }
@@ -302,5 +305,56 @@ class FeatureTests {
         IndexBenchmark.Timing timing = IndexBenchmark.compare(documents, index, "harbor", 30);
         assertTrue(timing.countsMatch());
         assertEquals(4, timing.count());
+    }
+
+    @Test
+    void slotFileLoadsSameColumnsAndSkipsBadRows(@TempDir Path dir) throws Exception {
+        Files.writeString(dir.resolve("slot-2.csv"), """
+                Specialization,Program Name,Faculty,URL,Program ID,Tuition Domestic (First Year)
+                Rivers,Master of Rivers,Faculty of Science,https://example.test/rivers,AAAA-AA,"1,000.00"
+                Missing,No Link,Faculty of Science,,BBBB-BB,"1,000.00"
+                Copy,Duplicate,Faculty of Science,https://example.test/rivers,CCCC-CC,"2,000.00"
+                """);
+        Corpus corpus = Corpus.load(dir);
+        assertEquals(1, corpus.programsForUniversity("slot-2").size());
+        Program loaded = corpus.programsForUniversity("slot-2").get(0);
+        assertEquals("Master of Rivers", loaded.getName());
+        assertEquals("AAAA-AA", loaded.getDetail("Program ID"));
+        assertEquals("", loaded.getDetail("Offers"));
+        assertEquals(2, corpus.index().frequency("rivers", "https://example.test/rivers"));
+    }
+
+    @Test
+    void wholeListRankUsesInternationalTuitionWhenAsked(@TempDir Path dir) throws Exception {
+        Program costlyAbroad = program("Alpha", "AAAA-AA", "https://example.test/a", "1,000.00", "2 years", "5", "10");
+        costlyAbroad.setDetail("Tuition International (First Year)", "9,000.00");
+        Program cheapAbroad = program("Beta", "BBBB-BB", "https://example.test/b", "5,000.00", "2 years", "5", "10");
+        cheapAbroad.setDetail("Tuition International (First Year)", "2,000.00");
+        WeightModel.Weights weights = new WeightModel.Weights(1, 0, 0, true);
+        assertEquals("Beta", WeightedMergeSort.rank(List.of(costlyAbroad, cheapAbroad), weights).get(0).program().getName());
+
+        SearchFrequency frequency = new SearchFrequency(dir.resolve("freq.tsv"));
+        frequency.load();
+        Corpus corpus = Corpus.of(UniversitySlots.all(), List.of(costlyAbroad, cheapAbroad), List.of(
+                new SearchDocument("ubc", "AAAA-AA", "Alpha", costlyAbroad.getUrl(), "alpha", false),
+                new SearchDocument("ubc", "BBBB-BB", "Beta", cheapAbroad.getUrl(), "beta", false)));
+        finder.portal.SearchService service = new finder.portal.SearchService(corpus, frequency);
+        finder.portal.SearchService.SearchOutcome outcome = service.rankCatalog(List.of(costlyAbroad, cheapAbroad), weights);
+        assertEquals("Beta", outcome.hits().get(0).keyword().name());
+        assertEquals(-1, outcome.hits().get(0).keyword().score());
+        assertFalse(outcome.recorded());
+        assertEquals(0, frequency.count("alpha"));
+    }
+
+    @Test
+    void nestedQuantifierIsRejectedBeforeItRuns() {
+        PatternFinder.Outcome locked = PatternFinder.find(List.of(), "(a+)+");
+        assertFalse(locked.ok());
+        assertTrue(locked.error().contains("lock up"));
+        SearchDocument document = new SearchDocument(
+                "ubc", "VGMMSC-CA", "Sample", "https://example.test/alpha", "code VGMMSC-CA here", false);
+        PatternFinder.Outcome found = PatternFinder.find(List.of(document), "VGMMSC-[A-Z]+");
+        assertTrue(found.ok());
+        assertEquals("VGMMSC-CA", found.matches().get(0).text());
     }
 }
