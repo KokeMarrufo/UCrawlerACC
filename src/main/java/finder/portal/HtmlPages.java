@@ -157,6 +157,7 @@ public final class HtmlPages {
                     <li><b>Completion.</b> The vocabulary is an AVL tree. A prefix walks that tree.</li>
                     <li><b>Spelling.</b> If the index has no page, words within edit distance 2 are suggested from that same tree. Words whose length is already too far away stop early.</li>
                     <li><b>Weights.</b> Mergesort orders by a score. Lower tuition and a shorter program rank higher. A higher offer rate ranks higher.</li>
+                    <li><b>Fit.</b> A tuition cap and a month cap drop programs that do not fit. Mergesort then orders the ones that do.</li>
                     <li><b>Regex.</b> Validation checks tuition, dates, and program ids. Pattern search is a different action over the page text.</li>
                   </ul>
                   <form method="get" action="/student">
@@ -198,6 +199,43 @@ public final class HtmlPages {
                 view.fieldNote,
                 suggestions(view),
                 hits(view)));
+
+        body.append("""
+                <section id="fit">
+                  <h2>Fit a budget</h2>
+                  <p class="muted">Name the most you can pay in the first year and the most months you can spend. Programs over either cap are dropped. A program with no tuition or no completion time is dropped too. Mergesort orders what remains, using the same formula as the search.</p>
+                  <form method="get" action="/student#fit">
+                    <input type="hidden" name="school" value="%s">
+                    <input type="hidden" name="fit" value="1">
+                    <div class="row">
+                      <label>Tuition cap <input name="maxTuition" value="%s" placeholder="10000"></label>
+                      <label>Month cap <input name="maxMonths" value="%s" placeholder="24"></label>
+                      <label>Cost weight <input name="wCost" value="%s" inputmode="decimal"></label>
+                      <label>Time weight <input name="wTime" value="%s" inputmode="decimal"></label>
+                      <label>Admission weight <input name="wAdmit" value="%s" inputmode="decimal"></label>
+                      <label>Tuition used for the cap
+                        <select name="tuition">
+                          <option value="domestic"%s>Domestic first year</option>
+                          <option value="international"%s>International first year</option>
+                        </select>
+                      </label>
+                    </div>
+                    <button type="submit">Recommend</button>
+                  </form>
+                  %s
+                  %s
+                </section>
+                """.formatted(
+                Web.escape(view.school),
+                Web.escape(view.maxTuition),
+                Web.escape(view.maxMonths),
+                Web.escape(view.wCost),
+                Web.escape(view.wTime),
+                Web.escape(view.wAdmit),
+                "international".equals(view.tuition) ? "" : " selected",
+                "international".equals(view.tuition) ? " selected" : "",
+                fitNote(view),
+                fitTable(view)));
 
         body.append("<section id=\"programs\"><h2>Programs</h2>");
         body.append("<div class=\"slots\">");
@@ -552,6 +590,38 @@ public final class HtmlPages {
         return html.toString();
     }
 
+    private static String fitNote(StudentView view) {
+        if (view.fitError != null && !view.fitError.isBlank()) {
+            return "<p class=\"error\">" + Web.escape(view.fitError) + "</p>";
+        }
+        if (view.fitSummary == null || view.fitSummary.isBlank()) {
+            return "";
+        }
+        return "<p>" + Web.escape(view.fitSummary) + "</p>";
+    }
+
+    private static String fitTable(StudentView view) {
+        if (view.fits == null || view.fits.isEmpty()) {
+            return "";
+        }
+        StringBuilder html = new StringBuilder("<div class=\"scroll\"><table><thead><tr>");
+        html.append("<th>Program</th><th>Score</th><th>Why it fits</th><th>Tuition</th><th>Months</th><th>Offer rate</th>");
+        html.append("</tr></thead><tbody>");
+        for (HitRow hit : view.fits) {
+            html.append("<tr><td><a href=\"").append(Web.escape(hit.url)).append("\">")
+                    .append(Web.escape(hit.name)).append("</a><br><span class=\"muted\">")
+                    .append(Web.escape(hit.programId))
+                    .append("</span></td><td>").append(Web.escape(hit.weightScore))
+                    .append("</td><td>").append(Web.escape(hit.breakdown))
+                    .append("</td><td>").append(Web.escape(hit.tuition))
+                    .append("</td><td>").append(Web.escape(hit.months))
+                    .append("</td><td>").append(Web.escape(hit.offerRate))
+                    .append("</td></tr>");
+        }
+        html.append("</tbody></table></div>");
+        return html.toString();
+    }
+
     private static String hits(StudentView view) {
         if (!view.searched || view.hits.isEmpty()) {
             return "";
@@ -740,5 +810,10 @@ public final class HtmlPages {
         public String patternMessage = "";
         public List<PatternFinder.Match> patternMatches = List.of();
         public String benchmarkText = "";
+        public String maxTuition = "";
+        public String maxMonths = "";
+        public String fitError = "";
+        public String fitSummary = "";
+        public List<HitRow> fits = List.of();
     }
 }

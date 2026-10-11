@@ -6,6 +6,7 @@ import finder.analysis.IndexBenchmark;
 import finder.crawl.Program;
 import finder.index.FrequencyCount;
 import finder.index.SearchFrequency;
+import finder.rank.ProgramFit;
 import finder.rank.WeightModel;
 import finder.regex.FieldValidator;
 import finder.regex.PatternFinder;
@@ -233,6 +234,41 @@ public final class PortalServer implements AutoCloseable {
                     rows.add(toRow(ranked, "international".equals(view.tuition)));
                 }
                 view.hits = rows;
+            }
+        }
+        view.maxTuition = query.getOrDefault("maxTuition", "");
+        view.maxMonths = query.getOrDefault("maxMonths", "");
+        if ("1".equals(query.get("fit"))) {
+            Double cost = parseWeight(view.wCost);
+            Double time = parseWeight(view.wTime);
+            Double admission = parseWeight(view.wAdmit);
+            if (cost == null || time == null || admission == null) {
+                view.fitError = "Weights have to be numbers.";
+            } else {
+                WeightModel.Weights weights = new WeightModel.Weights(
+                        cost, time, admission, "international".equals(view.tuition));
+                ProgramFit.Outcome fit = ProgramFit.recommend(view.programs, view.maxTuition, view.maxMonths, weights);
+                view.fitError = fit.error();
+                view.fitSummary = fit.summary();
+                List<HtmlPages.HitRow> rows = new ArrayList<>();
+                for (ProgramFit.Pick pick : fit.picks()) {
+                    HtmlPages.HitRow row = new HtmlPages.HitRow();
+                    Program program = pick.scored().program();
+                    row.name = program.getName();
+                    row.programId = program.getDetail("Program ID");
+                    row.url = program.getUrl();
+                    row.weightScore = Double.isInfinite(pick.scored().score())
+                            ? ""
+                            : String.format(Locale.US, "%.3f", pick.scored().score());
+                    row.breakdown = pick.reason() + " " + pick.scored().breakdown().describe();
+                    row.tuition = WeightModel.firstYearTuition(program, "international".equals(view.tuition));
+                    Double months = WeightModel.parseMonths(program.getDetail("Min Time to Completion"));
+                    row.months = months == null ? "" : String.format(Locale.US, "%.1f", months);
+                    Double rate = WeightModel.offerRate(program);
+                    row.offerRate = rate == null ? "" : String.format(Locale.US, "%.0f%%", rate * 100.0);
+                    rows.add(row);
+                }
+                view.fits = rows;
             }
         }
         if ("1".equals(query.get("benchmark"))) {

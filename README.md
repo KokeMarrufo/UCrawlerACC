@@ -59,6 +59,7 @@ Tests use HTML fixtures and the checked-in CSV. They do not contact UBC.
 - The analysis section can time one full scan against the index. That measurement runs only when asked.
 - If nothing matches, spell check suggests vocabulary words within edit distance 2. Completion walks the same AVL tree while you type.
 - Optional weights re-rank the matches with mergesort. Cost is first-year tuition (domestic or international). Time is the minimum completion time in months. Admission is offers divided by applications when both numbers exist. Lower cost and shorter time rank higher. A higher offer rate ranks higher. If a number is missing, that criterion is dropped and the other weights are renormalized. The formula is on the student page.
+- Fit a budget: a tuition cap and a month cap drop programs that do not fit. Mergesort orders the rest. Programs missing tuition or completion time are left out.
 - Frequency count is per word per URL. Pattern search is separate from the tuition, date, and program-id checks (for example `VGMMSC-CA`).
 - A student sees only their applications. The list polls every few seconds. An admin sees every application and can accept or reject.
 

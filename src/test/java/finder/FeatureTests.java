@@ -12,6 +12,7 @@ import finder.index.InvertedIndex;
 import finder.index.SearchFrequency;
 import finder.rank.BinaryHeap;
 import finder.rank.KeywordRanker;
+import finder.rank.ProgramFit;
 import finder.rank.WeightModel;
 import finder.rank.WeightedMergeSort;
 import finder.regex.FieldValidator;
@@ -291,6 +292,51 @@ class FeatureTests {
         program.setDetail("Offers", offers);
         program.setDetail("Applications", applications);
         return program;
+    }
+
+    @Test
+    void budgetFitDropsProgramsOverTheCapAndRanksTheRest() {
+        Program cheap = program("Beta Studies", "BETA-1", "https://example.test/beta", "2,000.00", "1 years", "10", "100");
+        Program costly = program("Alpha Studies", "ALPH-1", "https://example.test/alpha", "9,000.00", "2 years", "50", "100");
+        Program missing = program("Gamma Studies", "GAMM-1", "https://example.test/gamma", "", "1 years", "10", "20");
+        WeightModel.Weights costOnly = new WeightModel.Weights(1, 0, 0, false);
+
+        ProgramFit.Outcome tight = ProgramFit.recommend(List.of(costly, cheap, missing), "5,000", "24", costOnly);
+        assertEquals("", tight.error());
+        assertEquals(1, tight.picks().size());
+        assertEquals("Beta Studies", tight.picks().get(0).scored().program().getName());
+        assertTrue(tight.picks().get(0).reason().contains("2,000.00"));
+        assertTrue(tight.summary().contains("skipped"));
+
+        ProgramFit.Outcome wide = ProgramFit.recommend(List.of(costly, cheap), "10000", "30", costOnly);
+        assertEquals("Beta Studies", wide.picks().get(0).scored().program().getName());
+        assertEquals("Alpha Studies", wide.picks().get(1).scored().program().getName());
+
+        ProgramFit.Outcome bad = ProgramFit.recommend(List.of(cheap), "free", "24", costOnly);
+        assertTrue(bad.error().contains("Tuition cap"));
+        assertTrue(bad.picks().isEmpty());
+
+        ProgramFit.Outcome months = ProgramFit.recommend(List.of(cheap), "10000", "0", costOnly);
+        assertTrue(months.error().contains("Month cap"));
+    }
+
+    @Test
+    void ubcFitKeepsOnlyProgramsInsideTheCaps() throws Exception {
+        Corpus corpus = Corpus.load(Path.of("data"));
+        ProgramFit.Outcome outcome = ProgramFit.recommend(
+                corpus.programsForUniversity("ubc"),
+                "10000",
+                "24",
+                new WeightModel.Weights(1, 1, 1, false));
+        assertEquals("", outcome.error());
+        assertFalse(outcome.picks().isEmpty());
+        for (ProgramFit.Pick pick : outcome.picks()) {
+            Program program = pick.scored().program();
+            Double tuition = WeightModel.parseMoney(WeightModel.firstYearTuition(program, false));
+            Double months = WeightModel.parseMonths(program.getDetail("Min Time to Completion"));
+            assertTrue(tuition != null && tuition <= 10000);
+            assertTrue(months != null && months <= 24);
+        }
     }
 
     @Test
